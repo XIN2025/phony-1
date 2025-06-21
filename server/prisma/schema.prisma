@@ -1,0 +1,672 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum MemberRole {
+  Client
+  Developer
+  Designer
+  Manager
+  Admin
+}
+
+enum UserStoryStatus {
+  Todo
+  InProgress
+  InReview
+  Testing
+  Blocked
+  Done
+}
+
+enum waitlist_status {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CreditRequestStatus {
+  Pending
+  Confirmed
+  Rejected
+}
+
+enum ProductStage {
+  Idea
+  MVP
+  InProduction
+  Enterprise
+  Other
+}
+
+enum UserRole {
+  Founder
+  PM
+  SoftwareEngineer
+  Designer
+  Other
+}
+
+enum TransactionType {
+  PURCHASE
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  FAILED
+  EXPIRED
+}
+
+model CreditTransactions {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String            @db.ObjectId
+  amount          Float
+  currency        String            @default("USD")
+  platform        PaymentPlatform?  @default(STRIPE)
+  type            TransactionType
+  status          TransactionStatus
+  stripeSessionId String?
+  razorpayOrderId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  user            users             @relation(fields: [userId], references: [id])
+}
+
+enum PaymentPlatform {
+  STRIPE
+  RAZORPAY
+}
+
+model waitlist {
+  id         String          @id @default(auto()) @map("_id") @db.ObjectId
+  email      String          @unique
+  name       String?
+  from       String?         @default("manual")
+  status     waitlist_status @default(PENDING)
+  created_at DateTime        @default(now())
+  updated_at DateTime        @updatedAt
+
+  user users? @relation(fields: [email], references: [email])
+}
+
+model users {
+  id                        String               @id @default(auto()) @map("_id") @db.ObjectId
+  email                     String               @unique
+  password                  String?
+  first_name                String
+  last_name                 String
+  avatar_url                String?
+  linkedin_profile_url      String?
+  github_access_token       String?
+  applied_coupons           String[]
+  is_super_admin            Boolean?             @default(false)
+  credits_used              Float?               @default(0)
+  credits_remaining         Float?               @default(0)
+  meeting_credits_used      Float                @default(0)
+  meeting_credits_remaining Float                @default(1500)
+  max_projects              Int                  @default(1)
+  project_count             Int?                 @default(0)
+  is_verified               Boolean              @default(false)
+  verification_token        String?
+  verification_expiry       DateTime?
+  created_at                DateTime             @default(now())
+  updated_at                DateTime             @default(now())
+  project_members           project_members[]
+  projects                  projects[]
+  stories                   story[]
+  EnvironmentVersion        EnvironmentVersion[]
+
+  user_story_analytics  user_story_analytics[]
+  story_comments        story_comments[]
+  waitlist              waitlist?
+  meeting_data          meeting_data[]
+  credit_transactions   CreditTransactions[]
+  project_wiki          project_wiki[]
+  wiki_comments         wiki_comments[]
+  created_project_bugs  project_bugs[]         @relation("created_project_bugs")
+  assigned_project_bugs project_bugs[]         @relation("assigned_project_bugs")
+  deployments           deployments[]
+  deployment_stages     deployment_stages[]
+  chat_conversations    chat_conversations[]
+  bug_comments          bug_comments[]
+  created_stories       story[]                @relation(name: "created_stories")
+
+  work_logs Worklog[]
+}
+
+model coupon_codes {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  code        String    @unique
+  description String
+  discount    Float
+  max_uses    Int
+  used_count  Int       @default(0)
+  expires_at  DateTime?
+  created_at  DateTime  @default(now())
+}
+
+model projects {
+  id                       String                 @id @default(auto()) @map("_id") @db.ObjectId
+  title                    String
+  unique_name              String                 @unique
+  owner_id                 String                 @db.ObjectId
+  monitoring_urls          String[]               @default([])
+  lastErrorMail            DateTime?
+  project_context          String?                @db.String
+  docs_context             Json?
+  client_requirements      String?
+  logo_url                 String?
+  is_archived              Boolean?               @default(false)
+  design_theme             Json?
+  model_type               String                 @default("gpt-4o")
+  third_party_integrations String[]
+  created_at               DateTime               @default(now())
+  updated_at               DateTime               @default(now())
+  template                 String?
+  country_origin           String?
+  project_type             ProjectType?
+  // Relationships
+  deployments              deployments[]
+  github_repos             github_repos[]
+  sprints                  sprints[]
+  project_members          project_members[]
+  users                    users                  @relation(fields: [owner_id], references: [id])
+  story                    story[]
+  project_resources        project_resources[]
+  cicd                     cicd[]
+  meeting_data             meeting_data[]
+  tasks                    task[]
+  testing_data             testing_data[]
+  Environment              Environment[]
+  user_story_analytics     user_story_analytics[]
+  project_wiki             project_wiki[]
+  project_bugs             project_bugs[]
+  chat_conversations       chat_conversations[]
+
+  work_logs Worklog[]
+}
+
+model project_bugs {
+  id                         String    @id @default(auto()) @map("_id") @db.ObjectId
+  projectId                  String    @db.ObjectId
+  textFeedback               String?
+  screenshots                String[]
+  voiceFeedbackUrl           String?
+  voiceFeedbackTranscription String?
+  summary                    String?
+  title                      String?
+  status                     BugStatus @default(OPEN)
+  createdBy                  String    @db.ObjectId
+  assigneeId                 String?   @db.ObjectId
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  // Relations
+  project      projects       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator      users          @relation(name: "created_project_bugs", fields: [createdBy], references: [id])
+  assignee     users?         @relation(name: "assigned_project_bugs", fields: [assigneeId], references: [id])
+  bug_comments bug_comments[]
+
+  work_logs Worklog[]
+}
+
+model bug_comments {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  bug_id            String   @db.ObjectId
+  user_id           String   @db.ObjectId
+  content           String
+  parent_id         String?  @db.ObjectId
+  formatted_content Json?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  is_edited         Boolean  @default(false)
+
+  bug     project_bugs   @relation(fields: [bug_id], references: [id], onDelete: Cascade)
+  user    users          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent  bug_comments?  @relation("BugCommentThread", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies bug_comments[] @relation("BugCommentThread")
+}
+
+enum BugStatus {
+  OPEN
+  FIXED
+  CLOSED
+  IN_PROGRESS
+  WORKING_AS_INTENDED
+  DEPRIOTISED
+  NEEDS_MORE_INFO
+}
+
+model project_wiki {
+  id                  String          @id @default(auto()) @map("_id") @db.ObjectId
+  project_id          String          @db.ObjectId
+  title               String
+  content             Json
+  parent_id           String?         @db.ObjectId
+  is_public           Boolean         @default(false)
+  public_access_level WikiAccessLevel @default(View)
+  created_by          String          @db.ObjectId
+  last_embedded_at    DateTime?
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @updatedAt
+  projects            projects        @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  creator             users           @relation(fields: [created_by], references: [id])
+
+  parent        project_wiki?   @relation("WikiHierarchy", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wiki_comments wiki_comments[]
+  children      project_wiki[]  @relation("WikiHierarchy")
+
+  work_logs Worklog[]
+}
+
+model wiki_comments {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  wiki_id           String   @db.ObjectId
+  user_id           String   @db.ObjectId
+  content           String
+  parent_id         String?  @db.ObjectId
+  formatted_content Json?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  is_edited         Boolean  @default(false)
+
+  wiki    project_wiki    @relation(fields: [wiki_id], references: [id], onDelete: Cascade)
+  user    users           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent  wiki_comments?  @relation("WikiCommentThread", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies wiki_comments[] @relation("WikiCommentThread")
+}
+
+enum WikiAccessLevel {
+  View
+  Edit
+  Comment
+}
+
+model Environment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  projectId String   @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions EnvironmentVersion[]
+  project  projects             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+}
+
+model EnvironmentVersion {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  environmentId String   @db.ObjectId
+  secrets       String
+  versionNumber Int
+  createdBy     String   @db.ObjectId
+  createdAt     DateTime @default(now())
+
+  createdByUser users       @relation(fields: [createdBy], references: [id])
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@unique([environmentId, versionNumber])
+}
+
+model project_members {
+  id         String     @id @default(auto()) @map("_id") @db.ObjectId
+  project_id String     @db.ObjectId
+  user_email String
+  role       MemberRole
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now())
+  projects   projects   @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  users      users?     @relation(fields: [user_email], references: [email])
+}
+
+model deployments {
+  id                    String              @id @default(auto()) @map("_id") @db.ObjectId
+  project_id            String              @db.ObjectId
+  deployment_url        String?
+  backup_deployment_url String?
+  status                String              @default("not_started")
+  deployed_by           String?             @db.ObjectId
+  deployed_by_email     String?
+  created_at            DateTime            @default(now())
+  updated_at            DateTime            @default(now())
+  projects              projects            @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  deployer              users?              @relation(fields: [deployed_by], references: [id], onDelete: Cascade)
+  deployment_stages     deployment_stages[]
+
+  instance_ip   String?
+  instance_name String?
+  vm_ip_address String?
+  progress_url  String?
+  message       String?
+
+  custom_domain   String?
+  domain_verified Boolean  @default(false)
+  nameservers     String[]
+}
+
+model github_repos {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  project_id       String    @db.ObjectId
+  github_repo_url  String?
+  github_branch    String?
+  codespace_url    String?
+  codespace_expiry DateTime?
+  isError          Boolean?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now())
+  projects         projects  @relation(fields: [project_id], references: [id], onDelete: Cascade)
+}
+
+model story {
+  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
+  project_id          String           @db.ObjectId
+  sprint_id           String?          @db.ObjectId
+  created_by          String?          @db.ObjectId
+  title               String
+  description         String
+  estimation          Float
+  order               Int?
+  priority            Int              @default(0)
+  acceptance_criteria Json
+  db_schema_prompt    String?
+  api_prompt          String?
+  ui_prompt           String?
+  isEmailSent         Boolean?         @default(false)
+  status              UserStoryStatus  @default(Todo)
+  criterion_status    GenerationStatus @default(Done)
+  research_status     GenerationStatus @default(Done)
+  prompt_status       GenerationStatus @default(Done)
+  research            Json?
+  assigned_to         String?          @db.ObjectId
+  task_id             String?          @db.ObjectId
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @default(now())
+  projects            projects         @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  assignee            users?           @relation(fields: [assigned_to], references: [id])
+  task                task?            @relation(fields: [task_id], references: [id])
+  sprint              sprints?         @relation(fields: [sprint_id], references: [id])
+  comments            story_comments[]
+  creator             users?           @relation(name: "created_stories", fields: [created_by], references: [id])
+
+  work_logs Worklog[]
+}
+
+model Worklog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  projectId   String   @db.ObjectId
+  storyId     String?  @db.ObjectId
+  bugId       String?  @db.ObjectId
+  meetingId   String?  @db.ObjectId
+  wikiId      String?  @db.ObjectId
+  description String?
+  hoursWorked Float
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    users         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story   story?        @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  project projects      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  bug     project_bugs? @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  meeting meeting_data? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  wiki    project_wiki? @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+}
+
+model task {
+  id           String           @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  description  String?
+  order        Int?
+  type         FeatureType      @default(Feature)
+  research     Json?
+  meeting_id   String?          @db.ObjectId
+  story_status GenerationStatus @default(Done)
+  sprint_id    String?          @db.ObjectId
+  project_id   String           @db.ObjectId
+  created_at   DateTime         @default(now())
+  updated_at   DateTime         @default(now())
+  meeting_data meeting_data?    @relation(fields: [meeting_id], references: [id])
+  sprint       sprints?         @relation(fields: [sprint_id], references: [id])
+  project      projects         @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  stories story[]
+}
+
+model sprints {
+  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  project_id    String           @db.ObjectId
+  name          String
+  requirements  String?
+  status        SprintStatus     @default(NotStarted)
+  start_date    DateTime
+  end_date      DateTime
+  payment       PaymentStatus    @default(Unpaid)
+  price         Float?
+  feedback      String?
+  user_personas Json?
+  task_status   GenerationStatus @default(Done)
+  sprint_number Int              @default(1)
+  created_at    DateTime         @default(now())
+  updated_at    DateTime         @default(now())
+
+  projects projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  tasks    task[]
+
+  story story[]
+}
+
+model project_resources {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  project_id      String    @db.ObjectId
+  resource_type   String
+  resource_url    String
+  resource_name   String
+  isActive        Boolean   @default(true)
+  schedule_type   String?
+  schedule_time   String?
+  schedule_days   String[]
+  schedule_date   DateTime?
+  cron_expression String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now())
+  projects        projects  @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  meeting_data meeting_data[]
+}
+
+model meeting_data {
+  id                  String             @id @default(auto()) @map("_id") @db.ObjectId
+  project_id          String?            @db.ObjectId
+  resource_id         String?            @db.ObjectId
+  createdBy           String?            @db.ObjectId
+  filtered_transcript String?
+  title               String?
+  transcript          String?
+  summary             String?
+  metadata            Json?
+  isStoriesCreated    Boolean            @default(false)
+  created_at          DateTime           @default(now())
+  updated_at          DateTime           @default(now())
+  projects            projects?          @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  resources           project_resources? @relation(fields: [resource_id], references: [id])
+  creator             users?             @relation(fields: [createdBy], references: [id])
+
+  task task[]
+
+  work_logs Worklog[]
+}
+
+model testing_data {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  project_id  String   @db.ObjectId
+  type        TestType @default(jest)
+  testResults Json[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+  projects    projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+}
+
+model story_comments {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  story_id          String   @db.ObjectId
+  user_id           String   @db.ObjectId
+  content           String
+  formatted_content Json?
+  parent_id         String?  @db.ObjectId
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  is_edited         Boolean  @default(false)
+
+  story   story            @relation(fields: [story_id], references: [id], onDelete: Cascade)
+  user    users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent  story_comments?  @relation("CommentThread", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies story_comments[] @relation("CommentThread")
+}
+
+model user_story_analytics {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  actionType      String
+  projectId       String   @db.ObjectId
+  storyId         String?  @db.ObjectId
+  storyData       Json
+  actionBy        String?  @db.ObjectId
+  actionCreatedAt DateTime @default(now())
+  actionDetails   String?
+
+  project      projects @relation(fields: [projectId], references: [id])
+  actionByUser users?   @relation(fields: [actionBy], references: [id])
+}
+
+model cicd {
+  id                   String    @id @default(auto()) @map("_id") @db.ObjectId
+  project_id           String    @db.ObjectId
+  aws_access_key       String
+  aws_secret_key       String
+  aws_region           String
+  availability_zone    String
+  bundle_id            String?
+  github_pat           String?
+  cloudflare_zone_id   String?
+  cloudflare_api_token String?
+  public_ip            String?
+  instance_name        String?
+  dns_name             String?
+  aws_ssh_key          String?
+  created_at           DateTime  @default(now())
+  last_deployed_at     DateTime?
+  github_repo_url      String
+  blueprint_id         String?
+  status               String?
+  lastLogs             Json?
+
+  projects projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+}
+
+enum SprintStatus {
+  NotStarted
+  Active
+  Paused
+  Completed
+}
+
+enum PaymentStatus {
+  Paid
+  Unpaid
+}
+
+enum GenerationStatus {
+  Generating
+  Done
+}
+
+enum FeatureType {
+  Feature
+  Bug
+  Research
+  TechnicalDebt
+  Documentation
+  Investigation
+  Refactor
+  FutureEnhancement
+}
+
+enum TestType {
+  jest
+  cypress
+  coverage
+}
+
+enum ProjectType {
+  INTERNAL
+  EXTERNAL
+}
+
+model deployment_stages {
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
+  deployment_id     String          @db.ObjectId
+  stage             DeploymentStage
+  status            StageStatus
+  deployed_by       String          @db.ObjectId
+  deployed_by_email String
+  timestamp         DateTime        @default(now())
+  logs              String?
+  metadata          Json?
+  tool_name         String?
+  error_message     String?
+
+  deployment deployments @relation(fields: [deployment_id], references: [id], onDelete: Cascade)
+  user       users       @relation(fields: [deployed_by], references: [id])
+}
+
+enum DeploymentStage {
+  INITIALIZING
+  CREATING_VM
+  CONFIGURING_ENVIRONMENT
+  DEPLOYING_CODE
+  SETTING_UP_DNS
+  HEALTH_CHECK
+  COMPLETED
+  FAILED
+}
+
+enum StageStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model chat_conversations {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  project_id String   @db.ObjectId
+  user_id    String   @db.ObjectId
+  title      String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  project  projects        @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user     users           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  messages chat_messages[]
+}
+
+model chat_messages {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  conversation_id String   @db.ObjectId
+  role            String
+  content         String   @db.String
+  tool_calls      Json?
+  tool_results    Json?
+  created_at      DateTime @default(now())
+
+  conversation chat_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+}

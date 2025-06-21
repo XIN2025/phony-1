@@ -1,0 +1,43 @@
+services:
+  web:
+    image: opengig-web:latest
+    ports:
+      - "3000:3000"
+    env_file:
+      - web/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      - app_network
+
+  api:
+    image: opengig-api:latest
+    ports:
+      - "3001:3001"
+    env_file:
+      - server/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: overlay
